@@ -5,9 +5,9 @@ import time
 from enum import Enum
 from queue import Queue, Empty
 
-TIMEOUT_READ = 5.0
+TIMEOUT_READ = 5.0 # seconds
 
-class JR3Command(Enum):
+class Jr3Command(Enum):
     ACK = 1
     START = 2
     STOP = 3
@@ -19,229 +19,181 @@ class JR3Command(Enum):
     READ = 9
     BOOTUP = 10
 
-class JR3State(Enum):
+class Jr3State(Enum):
     READY = 0
     NOT_INITIALIZED = 1
 
 class SerialMsg:
-    def __init__(self, op=0, data=None):
+    def __init__(self, op: int, data: bytes = bytes()):
         self.op = op
-        self.data = data if data else bytearray()
+        self.data = data
         self.size = len(self.data)
 
-def build_message(msg):
-    buffer = bytearray()
-    buffer.extend(b'<%02d' % msg.op)
-
-    if msg.size > 0:
-        buffer.extend(msg.data)
-
-    buffer.extend(b'>')
-    return buffer
-
-class JR3Manager:
-    def __init__(self, channel, baudrate, timeout=TIMEOUT_READ):
+class Jr3Manager:
+    def __init__(self, channel: str, baudrate: int, timeout: float = TIMEOUT_READ):
         self._ser = serial.Serial(channel, baudrate)
-        self._data_queue = Queue(maxsize=1)
+        self._acknowledged_msgs_queue = Queue(maxsize=1)
         self._fs_factors = None
         self._last_state_time = None
-        self._state = JR3State.NOT_INITIALIZED
+        self._state = Jr3State.NOT_INITIALIZED
         self._forces = None
         self._torques = None
-        self._last_read = None
-        self._framecounter = None
+        self._last_ft_time = None
+        self._framecounter = 0
         self._timeout_read = timeout
-        self._last_command = None
-        self._read_count = 0
         self._running = True
-        self._thread = threading.Thread(target=self._do_work)
+        self._thread = threading.Thread(target=self._read_worker)
         self._thread.start()
 
     def __del__(self):
         self._running = False
         self._thread.join()
-        # self._send_message(SerialMsg(JR3Command.STOP.value))
+        self._send_message(SerialMsg(Jr3Command.STOP.value))
         self._ser.close()
 
-    def start(self, fc, period):
+    def start(self, cutoff_freq: int, period_ms: int) -> tuple[bool, Jr3State]:
         if not self.get_fs()[0]:
             return False, self._state
 
-        # start = time.time()
-        # while time.time() - start < 0.025:
-        #     if hasattr(self, '_last_ack_time') and self._last_ack_time - start > 0:
-        #         return True, self._state
-        #     time.sleep(0.001)
+        # convert period from ms to 0.01 Hz units
+        read_freq = int((1000 / period_ms) * 100)
 
-        success = self._callgenerator_send(fc, period, JR3Command.START.value)
+        data = cutoff_freq.to_bytes(2, 'little') + read_freq.to_bytes(4, 'little')
+        msg = SerialMsg(Jr3Command.START.value, data)
+        success = self._send_ack_command(msg)
         return success, self._state
 
-    def stop(self):
-        success = self._callgenerator_send(None, None, JR3Command.STOP.value)
+    def stop(self) -> tuple[bool, Jr3State]:
+        msg = SerialMsg(Jr3Command.STOP.value)
+        success = self._send_ack_command(msg)
         return success, self._state
 
-    def zero_offs(self):
-        success = self._callgenerator_send(None, None, JR3Command.ZERO_OFFS.value)
+    def zero_offs(self) -> tuple[bool, Jr3State]:
+        msg = SerialMsg(Jr3Command.ZERO_OFFS.value)
+        success = self._send_ack_command(msg)
         return success, self._state
 
-    def set_filter(self, fc):
-        success = self._callgenerator_send(fc, None, JR3Command.SET_FILTER.value)
-        return success and self._state == JR3State.READY, self._state
+    def set_filter(self, cutoff_freq: int) -> tuple[bool, Jr3State]:
+        msg = SerialMsg(Jr3Command.SET_FILTER.value, cutoff_freq.to_bytes(2, 'little'))
+        success = self._send_ack_command(msg)
+        return success, self._state
 
-    def get_state(self):
+    def get_state(self) -> tuple[bool, Jr3State]:
         if self._state is None or self._last_state_time is None or (time.time() - self._last_state_time > self._timeout_read):
-            if not self._callgenerator_send(None, None, JR3Command.GET_STATE.value):
-                return False, None
+            msg = SerialMsg(Jr3Command.GET_STATE.value)
+
+            if not self._send_ack_command(msg):
+                return False, self._state
+
         return True, self._state
 
-    def get_fs(self):
+    def get_fs(self) -> tuple[bool, (list[int] | None), Jr3State]:
         if self._fs_factors is None:
-            if not self._callgenerator_send(None, None, JR3Command.GET_FS.value):
-                return False, None
+            msg_out = SerialMsg(Jr3Command.GET_FS.value)
+            success = self._send_ack_command(msg_out, lambda msg_in: self._populate_fs_factors(msg_in.data))
+
+            if not success or self._fs_factors is None or len(self._fs_factors) != 6:
+                return False, None, self._state
+
         return True, self._fs_factors, self._state
 
-    def reset(self):
-        return self._callgenerator_send(None, None, JR3Command.RESET.value) and self._state == JR3State.READY
+    def reset(self) -> tuple[bool, Jr3State]:
+        msg = SerialMsg(Jr3Command.RESET.value)
+        success = self._send_ack_command(msg)
+        return success, self._state
 
-    def read(self):
-        if not self._last_read is None and time.time() - self._last_read < 0.1:
+    def read(self) -> tuple[bool, (list[float] | None), (list[float] | None), int]:
+        if not self._last_ft_time is None and time.time() - self._last_ft_time < self._timeout_read / 10:
             return True, self._forces, self._torques, self._framecounter
+
         return False, None, None, 0
 
-    def _do_work(self):
+    def _read_worker(self) -> None:
         while self._running:
             self._read_message()
             time.sleep(0.001)
 
-    def _callgenerator_send(self, fc, period, command):
-        self._last_command = command
-        msg_out = self._generador_msg(fc, period, command)
-
+    def _send_ack_command(self, msg_out: SerialMsg, callback = None) -> bool:
         try:
-            self._data_queue.get(block=False)
+            # clear previous ACK message
+            self._acknowledged_msgs_queue.get(block=False)
         except Empty:
             pass
 
         if not self._send_message(msg_out):
             return False
 
-        self._last_ack_time = time.time()
         start_time = time.time()
 
         while time.time() - start_time < self._timeout_read:
             try:
-                msg = self._data_queue.get(timeout=0.01)
+                msg_in = self._acknowledged_msgs_queue.get(timeout=0.01)
+                self._state = Jr3State(msg_in.data[0])
+                self._last_state_time = start_time
 
-                if msg.op != JR3Command.ACK.value or msg.size == 0:
-                    continue
+                if callback is not None:
+                    callback(msg_in)
 
-                self._state = JR3State(msg.data[0])
-                self._last_state_time = self._last_ack_time
-
-                if command == JR3Command.GET_FS.value and msg.size == 13:
-                    self._fs_factors = self._process_fs_factors(msg.data)
                 return True
             except Empty:
                 continue
 
         return False
 
-    def _generador_msg(self, frecuencia, periodo, command):
-        if command == JR3Command.START.value:
-            frecuencia_bytes = frecuencia.to_bytes(2, 'little')
-            periodo_bytes = periodo.to_bytes(4, 'little')
-            data = frecuencia_bytes + periodo_bytes
-            return SerialMsg(command, data)
-        elif command == JR3Command.SET_FILTER.value:
-            frecuencia_bytes = frecuencia.to_bytes(2, 'little')
-            data = frecuencia_bytes
-            return SerialMsg(command, data)
-        else:
-            data = bytearray()
-            return SerialMsg(command, data)
+    @staticmethod
+    def _build_message(msg: SerialMsg) -> bytearray:
+        buffer = bytearray()
+        buffer.extend(b'<%02d' % msg.op)
 
-    def _send_message(self, msg, buffer=None):
+        if msg.size > 0:
+            buffer.extend(msg.data)
+
+        buffer.extend(b'>')
+        return buffer
+
+    def _send_message(self, msg: SerialMsg) -> bool:
         try:
-            message = build_message(msg)
+            message = Jr3Manager._build_message(msg)
             self._ser.write(message)
-            if buffer is not None:
-                buffer.extend(message)
             return True
         except serial.SerialException as e:
             return False
 
-    def _process_fs_factors(self, data):
-        factors = []
-        for i in range(1, len(data), 2):
-            factors.append(int.from_bytes(data[i:i+2], 'little'))
-        return factors
+    def _populate_fs_factors(self, data) -> None:
+        if len(data) >= 12:
+            self._fs_factors = [int.from_bytes(data[i:i+2], 'little') for i in range(1, len(data), 2)]
 
-    def _parse_message(self, msg):
-        if msg.op == JR3Command.GET_FS.value:
-            if msg.size > 0:
-                data_to_process = msg.data[2:]
-                self._fs_factors = self._process_fs_factors(data_to_process)
-            else:
-                self._fs_factors = []
-        elif msg.op == JR3Command.READ.value:
-            if msg.size == 14:
-                if self._fs_factors is not None and len(self._fs_factors) >= 6:
-                    self._forces = [int.from_bytes(msg.data[2*i:2*i+2], 'little', signed=True) / self._fs_factors[i] for i in range(0, 3)]
-                    self._torques = [int.from_bytes(msg.data[2*i:2*i+2], 'little', signed=True) / (self._fs_factors[i] * 10) for i in range(3, 6)]
-                    self._framecounter = msg.data[6]
-                    self._last_read = time.time()
-                else:
-                    self._forces = None
-                    self._torques = None
-        self._read_count += 1
+    def _parse_ft_message(self, msg: SerialMsg) -> None:
+        if msg.size == 14 and self._fs_factors is not None and len(self._fs_factors) == 6:
+            self._forces = [int.from_bytes(msg.data[2*i:2*i+2], 'little', signed=True) / self._fs_factors[i] for i in range(0, 3)]
+            self._torques = [int.from_bytes(msg.data[2*i:2*i+2], 'little', signed=True) / (self._fs_factors[i] * 10) for i in range(3, 6)]
+            self._framecounter = msg.data[6]
+            self._last_ft_time = time.time()
 
-    def _read_message(self):
+    def _read_message(self) -> None:
         buffer_in = self._ser.read_until(b'>')
-        cleaned_msgs = JR3Manager._clean_message(buffer_in)
 
-        for buffer in cleaned_msgs:
-            msg = SerialMsg()
-            msg.size = 0
-
-            start_idx = buffer.find(b'<')
-            end_idx = buffer.find(b'>')
-
-            if start_idx == -1 or end_idx == -1 or start_idx > end_idx:
-                return False
-
-            buffer = buffer[start_idx + 1:end_idx]
-
-            if len(buffer) < 2:
-                return False
-
+        for buffer in Jr3Manager._extract_messages(buffer_in):
             try:
-                opcode_str = buffer[:2].decode()
-                msg.op = int(opcode_str)
-                msg.data = buffer[2:]
-                msg.size = len(msg.data)
+                msg = SerialMsg(int(buffer[:2].decode()), buffer[2:])
 
-                if msg.op == JR3Command.ACK.value:
-                    self._data_queue.put(msg)
-                    self._last_ack_time = time.time()
-                elif msg.op == JR3Command.BOOTUP.value:
-                    pass
-                elif msg.op == JR3Command.READ.value:
-                    self._parse_message(msg)
-                else:
-                    pass
+                if msg.op == Jr3Command.ACK.value and msg.size > 0:
+                    self._acknowledged_msgs_queue.put(msg)
+                elif msg.op == Jr3Command.READ.value:
+                    self._parse_ft_message(msg)
             except Exception as e:
-                return False
+                continue
 
-        return True
-
-    def _clean_message(buffer):
+    @staticmethod
+    def _extract_messages(buffer: bytes) -> list[bytes]:
         out = []
         start_idx = buffer.find(b'<')
 
         while start_idx != -1:
             end_idx = buffer.find(b'>', start_idx)
+
             if end_idx != -1:
-                out.append(buffer[start_idx:end_idx + 1])
+                out.append(buffer[start_idx + 1:end_idx])
                 start_idx = buffer.find(b'<', end_idx)
             else:
                 break

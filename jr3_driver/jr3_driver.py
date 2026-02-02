@@ -5,7 +5,7 @@ from rclpy.node import Node
 from geometry_msgs.msg import Wrench, Vector3
 from rcl_interfaces.msg import ParameterDescriptor
 from PyKDL import Rotation, Vector
-from .Jr3Manager import JR3Manager
+from .Jr3Manager import Jr3Manager
 
 class Jr3Driver(Node):
 
@@ -16,12 +16,12 @@ class Jr3Driver(Node):
             ParameterDescriptor(description='Serial channel name'))
         baudrate_param = self.declare_parameter('baudrate', 115200,
             ParameterDescriptor(description='Serial baudrate (bps)'))
-        cutoff_param = self.declare_parameter('cutoff_frecuency', 200,
+        cutoff_param = self.declare_parameter('cutoff_frequency', 200,
             ParameterDescriptor(description='Cutoff frequency (Hz)'))
-        frequency_param = self.declare_parameter('acquisition_frequency', 10,
-            ParameterDescriptor(description='Acquisition frequency (Hz)'))
-        publish_rate_param = self.declare_parameter('publish_rate', 0.1,
-            ParameterDescriptor(description='Publish rate (s)'))
+        read_period_param = self.declare_parameter('read_period', 0.01,
+            ParameterDescriptor(description='Sensor read period (s)'))
+        publish_period_param = self.declare_parameter('publish_period', 0.01,
+            ParameterDescriptor(description='Publish period (s)'))
         jr3_roll_param = self.declare_parameter('jr3_roll', 0.0,
             ParameterDescriptor(description='JR3 frame roll (rad)'))
         jr3_pitch_param = self.declare_parameter('jr3_pitch', 0.0,
@@ -42,15 +42,15 @@ class Jr3Driver(Node):
 
         self.publisher = self.create_publisher(Wrench, 'jr3', 10)
 
-        self.jr3 = JR3Manager(channel=channel_param.get_parameter_value().string_value,
+        self.jr3 = Jr3Manager(channel=channel_param.get_parameter_value().string_value,
                               baudrate=baudrate_param.get_parameter_value().integer_value)
 
         self.jr3.stop() # might be already running, ensure it's stopped
 
         self.get_logger().info('Starting JR3 sensor...')
 
-        self.jr3.start(fc=cutoff_param.get_parameter_value().integer_value,
-                       period=frequency_param.get_parameter_value().integer_value * 100)
+        self.jr3.start(cutoff_freq=cutoff_param.get_parameter_value().integer_value,
+                       period_ms=int(read_period_param.get_parameter_value().double_value * 1000))
 
         time.sleep(1)
         success, forces, torques, _ = self.jr3.read()
@@ -63,7 +63,7 @@ class Jr3Driver(Node):
 
         self.get_logger().info('JR3 sensor is running.')
 
-        self.timer = self.create_timer(publish_rate_param.get_parameter_value().double_value,
+        self.timer = self.create_timer(publish_period_param.get_parameter_value().double_value,
                                        self.timer_callback)
 
     def timer_callback(self):
