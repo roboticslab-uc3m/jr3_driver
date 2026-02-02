@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>jr3_driver</name>
+  <version>0.0.0</version>
+  <description>Driver for JR3 force-torque sensor</description>
+  <maintainer email="bwmn.peter@gmail.com">Bartek Łukawski</maintainer>
+  <license>LGPL-v2.1</license>
+  <depend>rclpy</depend>
+  <depend>geometry_msgs</depend>
+  <depend>rcl_interfaces</depend>
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
