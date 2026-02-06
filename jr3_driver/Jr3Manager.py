@@ -5,7 +5,7 @@ import time
 from enum import Enum
 from queue import Queue, Empty
 
-TIMEOUT_READ = 5.0 # seconds
+TIMEOUT_READ = 1.0 # seconds
 
 class Jr3Command(Enum):
     ACK = 1
