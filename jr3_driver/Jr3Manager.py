@@ -168,8 +168,8 @@ class Jr3Manager:
 
     def _parse_ft_message(self, msg: SerialMsg) -> None:
         if msg.size == 14 and self._fs_factors is not None and len(self._fs_factors) == 6:
-            self._forces = [int.from_bytes(msg.data[2*i:2*i+2], 'little', signed=True) / self._fs_factors[i] for i in range(0, 3)]
-            self._torques = [int.from_bytes(msg.data[2*i:2*i+2], 'little', signed=True) / (self._fs_factors[i] * 10) for i in range(3, 6)]
+            self._forces = [2 * int.from_bytes(msg.data[2*i:2*i+2], 'little', signed=True) / self._fs_factors[i] for i in range(0, 3)]
+            self._torques = [2 * int.from_bytes(msg.data[2*i:2*i+2], 'little', signed=True) / (self._fs_factors[i] * 100) for i in range(3, 6)]
             self._framecounter = msg.data[6]
             self._last_ft_time = time.time()
 
