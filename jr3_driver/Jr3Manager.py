@@ -46,6 +46,9 @@ class Jr3Manager:
         self._thread.start()
 
     def __del__(self):
+        self.close()
+
+    def close(self) -> None:
         self._running = False
         self._thread.join()
         self._send_message(SerialMsg(Jr3Command.STOP.value))
