@@ -45,6 +45,10 @@ class Jr3Driver(Node):
         self.jr3 = Jr3Manager(channel=channel_param.get_parameter_value().string_value,
                               baudrate=baudrate_param.get_parameter_value().integer_value)
 
+        ret, fs, state = self.jr3.get_fs()
+
+        self.get_logger().info(f'JR3 sensor state: {state}, full scale: {fs}')
+
         self.jr3.stop() # might be already running, ensure it's stopped
 
         self.get_logger().info('Starting JR3 sensor...')
@@ -52,7 +56,6 @@ class Jr3Driver(Node):
         self.jr3.start(cutoff_freq=cutoff_param.get_parameter_value().double_value,
                        period_ms=read_period_param.get_parameter_value().double_value)
 
-        time.sleep(1)
         success, forces, torques, _ = self.jr3.read()
         self.get_logger().info(f'Initial read success: {success}, forces: {forces}, torques: {torques}')
 
