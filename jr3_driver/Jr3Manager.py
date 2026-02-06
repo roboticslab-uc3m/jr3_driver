@@ -54,14 +54,14 @@ class Jr3Manager:
         self._send_message(SerialMsg(Jr3Command.STOP.value))
         self._ser.close()
 
-    def start(self, cutoff_freq: int, period_ms: int) -> tuple[bool, Jr3State]:
+    def start(self, cutoff_freq: float, period_ms: float) -> tuple[bool, Jr3State]:
         if not self.get_fs()[0]:
             return False, self._state
 
-        # convert period from ms to 0.01 Hz units
-        read_freq = int((1000 / period_ms) * 100)
+        cutoff_freq = int(cutoff_freq * 100) # [0.01 Hz]
+        period_ms = int(period_ms * 1000) # [us]
 
-        data = cutoff_freq.to_bytes(2, 'little') + read_freq.to_bytes(4, 'little')
+        data = cutoff_freq.to_bytes(2, 'little') + period_ms.to_bytes(4, 'little')
         msg = SerialMsg(Jr3Command.START.value, data)
         success = self._send_ack_command(msg)
         return success, self._state

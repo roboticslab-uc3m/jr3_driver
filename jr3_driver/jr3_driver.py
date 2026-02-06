@@ -16,12 +16,12 @@ class Jr3Driver(Node):
             ParameterDescriptor(description='Serial channel name'))
         baudrate_param = self.declare_parameter('baudrate', 115200,
             ParameterDescriptor(description='Serial baudrate (bps)'))
-        cutoff_param = self.declare_parameter('cutoff_frequency', 200,
+        cutoff_param = self.declare_parameter('cutoff_frequency', 2.0,
             ParameterDescriptor(description='Cutoff frequency (Hz)'))
-        read_period_param = self.declare_parameter('read_period', 0.01,
-            ParameterDescriptor(description='Sensor read period (s)'))
-        publish_period_param = self.declare_parameter('publish_period', 0.01,
-            ParameterDescriptor(description='Publish period (s)'))
+        read_period_param = self.declare_parameter('read_period', 10.0,
+            ParameterDescriptor(description='Sensor read period (ms)'))
+        publish_period_param = self.declare_parameter('publish_period', 20.0,
+            ParameterDescriptor(description='Publish period (ms)'))
         jr3_roll_param = self.declare_parameter('jr3_roll', 0.0,
             ParameterDescriptor(description='JR3 frame roll (rad)'))
         jr3_pitch_param = self.declare_parameter('jr3_pitch', 0.0,
@@ -49,8 +49,8 @@ class Jr3Driver(Node):
 
         self.get_logger().info('Starting JR3 sensor...')
 
-        self.jr3.start(cutoff_freq=cutoff_param.get_parameter_value().integer_value,
-                       period_ms=int(read_period_param.get_parameter_value().double_value * 1000))
+        self.jr3.start(cutoff_freq=cutoff_param.get_parameter_value().double_value,
+                       period_ms=read_period_param.get_parameter_value().double_value)
 
         time.sleep(1)
         success, forces, torques, _ = self.jr3.read()
@@ -63,7 +63,7 @@ class Jr3Driver(Node):
 
         self.get_logger().info('JR3 sensor is running.')
 
-        self.timer = self.create_timer(publish_period_param.get_parameter_value().double_value,
+        self.timer = self.create_timer(publish_period_param.get_parameter_value().double_value * 0.001,
                                        self.timer_callback)
 
     def timer_callback(self):
