@@ -17,7 +17,8 @@ setup(
     license='LGPL-v2.1',
     entry_points={
         'console_scripts': [
-            'jr3_driver = jr3_driver.jr3_driver:main'
+            'jr3_driver = jr3_driver.jr3_driver:main',
+            'jr3_admittance_controller = jr3_driver.jr3_admittance_controller:main',
         ],
     },
 )
