@@ -80,8 +80,8 @@ class Jr3Driver(Node):
 
         if success:
             msg = Wrench()
-            msg.force = Vector3(x=forces[0], y=forces[1], z=forces[2])
-            msg.torque = Vector3(x=torques[0], y=torques[1], z=torques[2])
+            msg.force = Vector3(x=forces[0], y=forces[1], z=forces[2]) # pyright: ignore
+            msg.torque = Vector3(x=torques[0], y=torques[1], z=torques[2]) # pyright: ignore
             self.publisher.publish(msg)
 
 def main(args=None):
