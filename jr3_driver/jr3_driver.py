@@ -49,7 +49,7 @@ class Jr3Driver(Node):
         if not ret or state != self.jr3._state.READY:
             raise RuntimeError('Failed to get JR3 sensor full scale factors or sensor not ready')
 
-        self.get_logger().info(f'JR3 sensor state: {state}, full scale: {fs}')
+        self.get_logger().info(f'JR3 sensor state: {state}, full scales: {fs}')
         self.jr3.stop() # might be already running, so ensure it's stopped
         self.get_logger().info('Starting JR3 sensor...')
 
@@ -80,8 +80,8 @@ class Jr3Driver(Node):
 
         if success:
             msg = Wrench()
-            msg.force = Vector3(forces[0], forces[1], forces[2])
-            msg.torque = Vector3(torques[0], torques[1], torques[2])
+            msg.force = Vector3(x=forces[0], y=forces[1], z=forces[2])
+            msg.torque = Vector3(x=torques[0], y=torques[1], z=torques[2])
             self.publisher.publish(msg)
 
 def main(args=None):
