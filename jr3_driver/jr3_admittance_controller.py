@@ -1,10 +1,15 @@
+import numpy as np
+import PyKDL as kdl
 import rclpy
+import threading
+import time
 
 from rclpy.node import Node
 from geometry_msgs.msg import Wrench, Vector3
 from rcl_interfaces.msg import ParameterDescriptor
-from PyKDL import Rotation, Vector
 from ABBRobotEGM import EGM
+
+EGM_PERIOD = 0.004 # seconds, 250 Hz
 
 class Jr3AdmittanceController(Node):
 
@@ -36,56 +41,88 @@ class Jr3AdmittanceController(Node):
         self.deadband_forces = deadband_forces_param.get_parameter_value().double_value
         self.deadband_torques = deadband_torques_param.get_parameter_value().double_value
 
-        self.R_jr3_tcp = Rotation.RPY(jr3_roll_param.get_parameter_value().double_value,
-                                       jr3_pitch_param.get_parameter_value().double_value,
-                                       jr3_yaw_param.get_parameter_value().double_value)
+        self.R_jr3_tcp = kdl.Rotation.RPY(jr3_roll_param.get_parameter_value().double_value,
+                                          jr3_pitch_param.get_parameter_value().double_value,
+                                          jr3_yaw_param.get_parameter_value().double_value)
 
-        self.toolWeight_0 = Vector(0.0, 0.0, -tool_mass_param.get_parameter_value().double_value * gravity_param.get_parameter_value().double_value)
-        self.toolCoM_N = Vector(tool_com_x_param.get_parameter_value().double_value,
-                                tool_com_y_param.get_parameter_value().double_value,
-                                tool_com_z_param.get_parameter_value().double_value)
+        self.toolWeight_0 = kdl.Vector(0.0, 0.0, -tool_mass_param.get_parameter_value().double_value * gravity_param.get_parameter_value().double_value)
+
+        self.toolCoM_N = kdl.Vector(tool_com_x_param.get_parameter_value().double_value,
+                                    tool_com_y_param.get_parameter_value().double_value,
+                                    tool_com_z_param.get_parameter_value().double_value)
+
+        self.wrench = None
+        self.wrench_initial = None
 
         self.jr3_subscription = self.create_subscription(Wrench, 'jr3', self.jr3_listener_callback, 10)
         self.jr3_subscription # prevent unused variable warning
 
-        self.timer = self.create_timer(0.048, self.egm_timer_callback)
-        self.timer # prevent unused variable warning
+        self.running = True
+        self.egm_thread = threading.Thread(target=self.egm_command_worker)
+        self.egm_thread.start()
 
         self.get_logger().info('JR3 admittance controller is running.')
 
     def jr3_listener_callback(self, msg: Wrench):
-        forces = Vector(msg.force.x, msg.force.y, msg.force.z)
-        torques = Vector(msg.torque.x, msg.torque.y, msg.torque.z)
+        forces = kdl.Vector(msg.force.x, msg.force.y, msg.force.z)
+        torques = kdl.Vector(msg.torque.x, msg.torque.y, msg.torque.z)
+        self.wrench = kdl.Wrench(forces, torques)
 
-        if forces.Norm() < self.deadband_forces:
-            forces = Vector.Zero()
+    def egm_command_worker(self):
+        with EGM() as egm:
+            self.get_logger().info('EGM command worker started, waiting for connection from robot.')
 
-        if torques.Norm() < self.deadband_torques:
-            torques = Vector.Zero()
+            while self.running:
+                success, _ = egm.receive_from_robot(timeout=1.0)
 
-    def egm_timer_callback(self):
-        pass
+                if success:
+                    self.get_logger().info('EGM connection established.')
+                    break
+
+            while self.running:
+                success, state = egm.receive_from_robot(timeout=0.01)
+
+                if success and self.wrench is not None:
+                    R_0_N = kdl.Rotation.Quaternion(state.cartesian.orient.u1, state.cartesian.orient.u2, state.cartesian.orient.u3, state.cartesian.orient.u0)
+                    p_0 = kdl.Vector(state.cartesian.pos.x, state.cartesian.pos.y, state.cartesian.pos.z)
+                    H_0_N = kdl.Frame(R_0_N, p_0)
+
+                    toolWrench = H_0_N.Inverse() * self.toolWeight_0
+                    toolWrench_N = toolWrench.RefPoint(self.toolCoM_N)
+
+                    wrench = self.wrench - toolWrench_N
+
+                    if self.wrench_initial is None:
+                        self.wrench_initial = wrench
+
+                    wrench -= self.wrench_initial
+
+                    if wrench.force.Norm() < self.deadband_forces:
+                        wrench.force = kdl.Vector.Zero()
+
+                    if wrench.torque.Norm() < self.deadband_torques:
+                        wrench.torque = kdl.Vector.Zero()
+
+                    pos = np.array([])
+                    orient = np.array([])
+
+                    egm.send_to_robot_cart(state.cartesian.pos, state.cartesian.orient)
+
+                time.sleep(EGM_PERIOD)
 
 def main(args=None):
     rclpy.init(args=args)
+    node = Jr3AdmittanceController()
 
     try:
-        driver = Jr3AdmittanceController()
-
-        try:
-            rclpy.spin(driver)
-        except KeyboardInterrupt:
-            pass
-        finally:
-            driver.close()
-            driver.destroy_node()
-    except RuntimeError:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
         pass
-    except Exception as e:
-        print(f"Unexpected error: {e}")
     finally:
-        if rclpy.ok():
-            rclpy.shutdown()
+        node.running = False
+        node.egm_thread.join()
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
