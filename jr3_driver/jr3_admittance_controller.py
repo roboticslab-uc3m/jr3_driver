@@ -65,8 +65,8 @@ class Jr3AdmittanceController(Node):
                                       tool_com_y_param.get_parameter_value().double_value,
                                       tool_com_z_param.get_parameter_value().double_value)
 
-        self.wrench_jr3 = None
-        self.wrench_jr3_initial = None
+        self.wrench_tcp = None
+        self.wrench_tcp_initial = None
 
         self.jr3_subscription = self.create_subscription(Wrench, 'jr3', self.jr3_listener_callback, 10)
         self.jr3_subscription # prevent unused variable warning
@@ -80,7 +80,7 @@ class Jr3AdmittanceController(Node):
     def jr3_listener_callback(self, msg: Wrench):
         force = kdl.Vector(msg.force.x, msg.force.y, msg.force.z)
         torque = kdl.Vector(msg.torque.x, msg.torque.y, msg.torque.z)
-        self.wrench_jr3 = kdl.Wrench(force, torque)
+        self.wrench_tcp = self.H_tcp_jr3 * kdl.Wrench(force, torque)
 
     def egm_command_worker(self):
         with EGM() as egm:
@@ -96,33 +96,33 @@ class Jr3AdmittanceController(Node):
             while self.running:
                 success, state = egm.receive_from_robot(timeout=0.01)
 
-                if success and state is not None and state.cartesian is not None and self.wrench_jr3 is not None:
+                if success and state is not None and state.cartesian is not None and self.wrench_tcp is not None:
                     R_0_tcp = kdl.Rotation.Quaternion(state.cartesian.orient.u1, state.cartesian.orient.u2, state.cartesian.orient.u3, state.cartesian.orient.u0)
                     p_0 = kdl.Vector(state.cartesian.pos.x, state.cartesian.pos.y, state.cartesian.pos.z)
                     H_0_tcp = kdl.Frame(R_0_tcp, p_0)
 
-                    toolWeight_jr3 = H_0_tcp.M.Inverse() * self.toolWeight_0 # tool weight measured on the CoM
-                    toolWeight_jr3 = toolWeight_jr3.RefPoint(-self.toolCoM_jr3) # tool weight measured on the sensor plate
+                    toolWeight_tcp = H_0_tcp.M.Inverse() * self.toolWeight_0 # tool weight measured on the CoM
+                    toolWeight_tcp = toolWeight_tcp.RefPoint(self.H_jr3_tcp.p - self.toolCoM_jr3) # tool weight measured on the TCP
 
-                    wrench_jr3 = self.wrench_jr3 - toolWeight_jr3
+                    wrench_tcp = self.wrench_tcp - toolWeight_tcp
 
-                    if self.wrench_jr3_initial is None:
-                        self.wrench_jr3_initial = wrench_jr3
+                    if self.wrench_tcp_initial is None:
+                        self.wrench_tcp_initial = kdl.Wrench(wrench_tcp)
 
-                    wrench_jr3 -= self.wrench_jr3_initial
+                    wrench_tcp -= self.wrench_tcp_initial
 
-                    if wrench_jr3.force.Norm() < self.deadband_forces:
-                        wrench_jr3.force = kdl.Vector.Zero()
+                    if wrench_tcp.force.Norm() < self.deadband_forces:
+                        wrench_tcp.force = kdl.Vector.Zero()
 
-                    if wrench_jr3.torque.Norm() < self.deadband_torques:
-                        wrench_jr3.torque = kdl.Vector.Zero()
+                    if wrench_tcp.torque.Norm() < self.deadband_torques:
+                        wrench_tcp.torque = kdl.Vector.Zero()
 
-                    wrench_0 = H_0_tcp * (self.H_tcp_jr3 * wrench_jr3)
+                    wrench_0 = H_0_tcp.M * wrench_tcp
 
                     pos = np.array([])
                     orient = np.array([])
 
-                    egm.send_to_robot_cart(state.cartesian.pos, state.cartesian.orient)
+                    # egm.send_to_robot_cart(state.cartesian.pos, state.cartesian.orient)
 
                 time.sleep(EGM_PERIOD)
 
