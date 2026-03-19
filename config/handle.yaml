@@ -1,0 +1,23 @@
+jr3_driver:
+  ros__parameters:
+    channel: /dev/ttyLPC1768
+    baudrate: 115200
+    cutoff_frequency: 2.0
+    read_period: 10.0
+    publish_period: 20.0
+
+jr3_admittance_controller:
+  ros__parameters:
+    deadband_forces: 0.5
+    deadband_torques: 0.01
+    jr3_trans_x: 0.0
+    jr3_trans_y: 0.0
+    jr3_trans_z: -0.1522
+    jr3_roll: 3.141593
+    jr3_pitch: 0.0
+    jr3_yaw: -0.785398
+    gravity: 9.8
+    tool_mass: 0.442
+    tool_com_x: 0.0
+    tool_com_y: 0.0
+    tool_com_z: -0.074
