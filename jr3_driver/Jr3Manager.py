@@ -31,7 +31,7 @@ class SerialMsg:
 
 class Jr3Manager:
     def __init__(self, channel: str, baudrate: int, timeout: float = TIMEOUT_READ):
-        self._ser = serial.Serial(channel, baudrate)
+        self._ser = serial.Serial(channel, baudrate, timeout=timeout)
         self._acknowledged_msgs_queue = Queue(maxsize=1)
         self._fs_factors = None
         self._last_state_time = None

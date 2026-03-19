@@ -67,7 +67,7 @@ class Jr3Driver(Node):
             raise RuntimeError('Failed to zero JR3 sensor')
 
     def close(self):
-        self.get_logger().info('Closing JR3 driver.')
+        self.get_logger().info('Closing JR3 driver...')
 
         if self.timer is not None:
             self.timer.cancel()
