@@ -44,8 +44,25 @@ class Jr3BaseNode(ABC, Node):
 
         command_period = command_period_param.get_parameter_value().double_value
 
+        if command_period <= 0.0:
+            self.get_logger().error(f'Invalid command_period: {command_period}. Must be greater than 0.0.')
+            raise ValueError(f'Invalid command_period: {command_period}. Must be greater than 0.0.')
+        else:
+            self.get_logger().info(f'Using command_period: {command_period}')
+
         self.deadband_forces = deadband_forces_param.get_parameter_value().double_value
         self.deadband_torques = deadband_torques_param.get_parameter_value().double_value
+
+        if self.deadband_forces < 0.0:
+            self.get_logger().error(f'Invalid deadband_forces: {self.deadband_forces}. Must be greater than or equal to 0.0.')
+            raise ValueError(f'Invalid deadband_forces: {self.deadband_forces}. Must be greater than or equal to 0.0.')
+
+        if self.deadband_torques < 0.0:
+            self.get_logger().error(f'Invalid deadband_torques: {self.deadband_torques}. Must be greater than or equal to 0.0.')
+            raise ValueError(f'Invalid deadband_torques: {self.deadband_torques}. Must be greater than or equal to 0.0.')
+
+        self.get_logger().info(f'Using deadband_forces: {self.deadband_forces}')
+        self.get_logger().info(f'Using deadband_torques: {self.deadband_torques}')
 
         trans_jr3_tcp = kdl.Vector(jr3_trans_x_param.get_parameter_value().double_value,
                                    jr3_trans_y_param.get_parameter_value().double_value,
@@ -58,8 +75,17 @@ class Jr3BaseNode(ABC, Node):
         self.H_jr3_tcp = kdl.Frame(R_jr3_tcp, trans_jr3_tcp)
         self.H_tcp_jr3 = self.H_jr3_tcp.Inverse()
 
+        gravity = gravity_param.get_parameter_value().double_value
+        tool_mass = tool_mass_param.get_parameter_value().double_value
+
+        if tool_mass < 0.0:
+            self.get_logger().error(f'Invalid tool_mass: {tool_mass}. Must be greater than 0.0.')
+            raise ValueError(f'Invalid tool_mass: {tool_mass}. Must be greater than 0.0.')
+        else:
+            self.get_logger().info(f'Using tool_mass: {tool_mass}')
+
         self.toolWeight_0 = kdl.Wrench() # initializes .wrench to zero
-        self.toolWeight_0.force = kdl.Vector(0.0, 0.0, -tool_mass_param.get_parameter_value().double_value * gravity_param.get_parameter_value().double_value)
+        self.toolWeight_0.force = kdl.Vector(0.0, 0.0, -tool_mass * gravity)
 
         self.toolCoM_jr3 = kdl.Vector(tool_com_x_param.get_parameter_value().double_value,
                                       tool_com_y_param.get_parameter_value().double_value,
@@ -73,7 +99,7 @@ class Jr3BaseNode(ABC, Node):
 
         self.current_pose = None
 
-        self.egm_subscription = self.create_subscription(Wrench, 'state/pose', self.egm_state_callback, 10)
+        self.egm_subscription = self.create_subscription(Pose, 'state/pose', self.egm_state_callback, 10)
         self.egm_subscription # prevent unused variable warning
 
         self.command_thread = self.create_timer(command_period, self.command_worker)

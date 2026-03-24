@@ -92,6 +92,7 @@ class Jr3ToolCalibration(Jr3BaseNode):
         self.publisher.publish(msg)
 
         self.step += 1
+        self.get_logger().info(f'Wrench: {wrench_0}')
 
 def main(args=None):
     rclpy.init(args=args)
