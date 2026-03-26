@@ -116,10 +116,13 @@ class Jr3BaseNode(ABC, Node):
 
     def command_worker(self):
         if self.current_pose is not None and self.wrench_tcp is not None:
-            H_0_tcp = kdl.Frame(self.current_pose)
+            H_0_N = kdl.Frame(self.current_pose)
+            H_N_tcp = kdl.Frame(kdl.Vector(0.1817, 0.0, 0.0))
+            H_0_tcp = H_0_N * H_N_tcp
 
             toolWeight_tcp = H_0_tcp.M.Inverse() * self.toolWeight_0 # tool weight measured on the CoM
-            toolWeight_tcp = toolWeight_tcp.RefPoint(self.H_jr3_tcp.p - self.toolCoM_jr3) # tool weight measured on the TCP
+            diff_jr3 = self.H_jr3_tcp.p - self.toolCoM_jr3
+            toolWeight_tcp = toolWeight_tcp.RefPoint(self.H_tcp_jr3.M * diff_jr3) # tool weight measured on the TCP
 
             wrench_tcp = self.wrench_tcp - toolWeight_tcp
 
