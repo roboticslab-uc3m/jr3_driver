@@ -12,7 +12,7 @@ jr3_admittance_controller:
     deadband_torques: 0.01
     jr3_trans_x: 0.0
     jr3_trans_y: 0.0
-    jr3_trans_z: -0.1522
+    jr3_trans_z: -0.15295
     jr3_roll: 3.141593
     jr3_pitch: 0.0
     jr3_yaw: -0.785398
@@ -20,4 +20,4 @@ jr3_admittance_controller:
     tool_mass: 0.442
     tool_com_x: 0.0
     tool_com_y: 0.0
-    tool_com_z: -0.074
+    tool_com_z: -0.08975

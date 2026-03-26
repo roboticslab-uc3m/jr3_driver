@@ -1,0 +1,4 @@
+MODULE CalibData
+    PERS tooldata JR3PenTool:=[TRUE,[[0,0,218.7],[1,0,0,0]],[0.235,[0,0,80.5],[1,0,0,0],0,0,0]];
+    PERS tooldata JR3HandleTool:=[TRUE,[[0,0,181.7],[1,0,0,0]],[0.584,[0,0,118.5],[1,0,0,0],0,0,0]];
+ENDMODULE
