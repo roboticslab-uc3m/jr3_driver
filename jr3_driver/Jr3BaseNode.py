@@ -42,13 +42,13 @@ class Jr3BaseNode(ABC, Node):
         tool_com_z_param = self.declare_parameter('tool_com_z', 0.0,
             ParameterDescriptor(description='z coordinate of the tool center of mass in the sensor frame (m)'))
 
-        command_period = command_period_param.get_parameter_value().double_value
+        self.command_period = command_period_param.get_parameter_value().double_value
 
-        if command_period <= 0.0:
-            self.get_logger().error(f'Invalid command_period: {command_period}. Must be greater than 0.0.')
-            raise ValueError(f'Invalid command_period: {command_period}. Must be greater than 0.0.')
+        if self.command_period <= 0.0:
+            self.get_logger().error(f'Invalid command_period: {self.command_period}. Must be greater than 0.0.')
+            raise ValueError(f'Invalid command_period: {self.command_period}. Must be greater than 0.0.')
         else:
-            self.get_logger().info(f'Using command_period: {command_period}')
+            self.get_logger().info(f'Using command_period: {self.command_period}')
 
         self.deadband_forces = deadband_forces_param.get_parameter_value().double_value
         self.deadband_torques = deadband_torques_param.get_parameter_value().double_value
@@ -102,7 +102,7 @@ class Jr3BaseNode(ABC, Node):
         self.egm_subscription = self.create_subscription(Pose, 'state/pose', self.egm_state_callback, 10)
         self.egm_subscription # prevent unused variable warning
 
-        self.command_thread = self.create_timer(command_period, self.command_worker)
+        self.command_thread = self.create_timer(self.command_period, self.command_worker)
 
     def jr3_listener_callback(self, msg: Wrench):
         force = kdl.Vector(msg.force.x, msg.force.y, msg.force.z)
@@ -136,8 +136,8 @@ class Jr3BaseNode(ABC, Node):
 
             wrench_0 = H_0_tcp.M * wrench_tcp
 
-            self.send_command(wrench_0, H_0_tcp)
+            self.send_command(wrench_0, wrench_tcp, H_0_tcp)
 
     @abstractmethod
-    def send_command(self, wrench_0, H_0_tcp):
+    def send_command(self, wrench_0, wrench_tcp, H_0_tcp):
         pass

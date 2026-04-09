@@ -24,7 +24,7 @@ class Jr3ImpedanceController(Jr3BaseNode):
 
         self.get_logger().info('JR3 impedance controller is running.')
 
-    def send_command(self, wrench_0, H_0_tcp):
+    def send_command(self, wrench_0, wrench_tcp, H_0_tcp):
         pass
 
 def main(args=None):

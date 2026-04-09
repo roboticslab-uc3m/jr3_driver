@@ -26,6 +26,7 @@ setup(
             'jr3_admittance_controller = jr3_driver.jr3_admittance_controller:main',
             'jr3_impedance_controller = jr3_driver.jr3_impedance_controller:main',
             'jr3_tool_calibration = jr3_driver.jr3_tool_calibration:main',
+            'jr3_path_correction = jr3_driver.jr3_path_correction:main',
         ],
     },
 )

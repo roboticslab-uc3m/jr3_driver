@@ -62,7 +62,7 @@ class Jr3ToolCalibration(Jr3BaseNode):
             self.initial_value = list(map(math.degrees, msg.position))
             self.current_value = list(self.initial_value)
 
-    def send_command(self, wrench_0, H_0_tcp):
+    def send_command(self, wrench_0, wrench_tcp, H_0_tcp):
         if self.current_value is None or self.initial_value is None:
             return
 
