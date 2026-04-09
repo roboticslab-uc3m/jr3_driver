@@ -1,4 +1,5 @@
 import PyKDL as kdl
+import math
 
 from rclpy.node import Node
 from geometry_msgs.msg import Pose, Wrench
@@ -107,7 +108,8 @@ class Jr3BaseNode(ABC, Node):
     def jr3_listener_callback(self, msg: Wrench):
         force = kdl.Vector(msg.force.x, msg.force.y, msg.force.z)
         torque = kdl.Vector(msg.torque.x, msg.torque.y, msg.torque.z)
-        self.wrench_tcp = self.H_tcp_jr3 * kdl.Wrench(force, torque)
+        self.wrench_jr3 = kdl.Wrench(force, torque)
+        self.wrench_tcp = self.H_tcp_jr3 * self.wrench_jr3
 
     def egm_state_callback(self, msg: Pose):
         p = kdl.Vector(msg.position.x, msg.position.y, msg.position.z)
@@ -117,19 +119,31 @@ class Jr3BaseNode(ABC, Node):
     def command_worker(self):
         if self.current_pose is not None and self.wrench_tcp is not None:
             H_0_N = kdl.Frame(self.current_pose)
-            H_N_tcp = kdl.Frame(kdl.Vector(0.1817, 0.0, 0.0))
+            H_N_tcp = kdl.Frame(kdl.Vector(0.0, 0.0, 0.1817))
             H_0_tcp = H_0_N * H_N_tcp
+
+            if self.wrench_tcp_initial is None:
+                self.wrench_tcp_initial = kdl.Wrench(self.wrench_tcp)
+
+            wrench_tcp = self.wrench_tcp - self.wrench_tcp_initial
+
+            # self.get_logger().info(f'wrench_jr3: {self.wrench_jr3}, wrench_tcp: {self.wrench_tcp}')
+            # self.get_logger().info(f'{self.wrench_jr3.force.z()}')
+            # alpha, beta, gamma = self.current_pose.M.GetEulerZYZ()
+            # self.get_logger().info(f'Current pose: {self.current_pose.p}, beta: {math.degrees(beta)} deg')
+            # self.get_logger().info(f'{self.wrench_jr3.force.z()} {math.degrees(beta)}')
 
             toolWeight_tcp = H_0_tcp.M.Inverse() * self.toolWeight_0 # tool weight measured on the CoM
             diff_jr3 = self.H_jr3_tcp.p - self.toolCoM_jr3
             toolWeight_tcp = toolWeight_tcp.RefPoint(self.H_tcp_jr3.M * diff_jr3) # tool weight measured on the TCP
 
-            wrench_tcp = self.wrench_tcp - toolWeight_tcp
+            # wrench_tcp = self.wrench_tcp - toolWeight_tcp
+            wrench_tcp -= toolWeight_tcp
 
-            if self.wrench_tcp_initial is None:
-                self.wrench_tcp_initial = kdl.Wrench(wrench_tcp)
+            # if self.wrench_tcp_initial is None:
+            #     self.wrench_tcp_initial = kdl.Wrench(wrench_tcp)
 
-            wrench_tcp -= self.wrench_tcp_initial
+            # wrench_tcp -= self.wrench_tcp_initial
 
             if wrench_tcp.force.Norm() < self.deadband_forces:
                 wrench_tcp.force = kdl.Vector.Zero()
