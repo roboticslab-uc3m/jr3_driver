@@ -28,7 +28,7 @@ class Jr3PathCorrection(Jr3BaseNode):
         pressure_z = pressure_z_param.get_parameter_value().double_value
 
         self.pressure = kdl.Vector(pressure_x, pressure_y, pressure_z)
-        self.get_logger().info(f'Using pressure vector: {self.pressure}')
+        self.get_logger().info(f'Using pressure vector: [{self.pressure.x()}, {self.pressure.y()}, {self.pressure.z()}] N')
 
         self.kp = kp_param.get_parameter_value().double_value
         self.ki = ki_param.get_parameter_value().double_value
@@ -37,17 +37,26 @@ class Jr3PathCorrection(Jr3BaseNode):
 
         self.proportional_error = kdl.Vector(0.0, 0.0, 0.0)
         self.integral_error = kdl.Vector(0.0, 0.0, 0.0)
+        self.initial_fz = None
 
         self.publisher = self.create_publisher(Point, 'command/path_corr', 10)
         self.get_logger().info('JR3 path correction is running.')
 
     def send_command(self, wrench_0, wrench_tcp, H_0_tcp):
+        if self.initial_fz is None:
+            self.initial_fz = wrench_tcp.force.z()
+            self.get_logger().info(f'Initial Fz set to: {self.initial_fz} N')
+
+        local_wrench = kdl.Wrench(kdl.Vector.Zero(), kdl.Vector.Zero())
+        local_wrench.force.z(wrench_tcp.force.z() - self.initial_fz)
+        self.get_logger().info(f'Wrench in TCP frame after zeroing Fz:[{local_wrench.force.z()} N')
+
         prev_proportional_error = self.proportional_error
 
         # this is a sum since:
         # - pressure: force to be exerted by the tool on the environment to correct the path
         # - wrench_tcp.force: force measured by the sensor
-        proportional_error = self.pressure + wrench_tcp.force
+        proportional_error = local_wrench.force - self.pressure
         proportional_term = self.kp * proportional_error
 
         if self.ki != 0.0:
@@ -66,6 +75,7 @@ class Jr3PathCorrection(Jr3BaseNode):
         command_msg.x = setpoint.x()
         command_msg.y = setpoint.y()
         command_msg.z = setpoint.z()
+        self.get_logger().info(f'Publishing path correction command: [{command_msg.x}, {command_msg.y}, {command_msg.z}] m')
         self.publisher.publish(command_msg)
 
 def main(args=None):

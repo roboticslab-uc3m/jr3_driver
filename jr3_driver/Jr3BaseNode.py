@@ -136,7 +136,7 @@ class Jr3BaseNode(ABC, Node):
 
             wrench_0 = H_0_tcp.M * wrench_tcp
 
-            self.send_command(wrench_0, wrench_tcp, H_0_tcp)
+            self.send_command(wrench_0, self.wrench_tcp, H_0_tcp)
 
     @abstractmethod
     def send_command(self, wrench_0, wrench_tcp, H_0_tcp):
