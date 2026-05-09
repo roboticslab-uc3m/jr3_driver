@@ -7,6 +7,7 @@
   <maintainer email="bwmn.peter@gmail.com">Bartek Łukawski</maintainer>
   <license>LGPL-v2.1</license>
   <depend>rclpy</depend>
+  <depend>std_srvs</depend>
   <depend>geometry_msgs</depend>
   <depend>rcl_interfaces</depend>
   <export>

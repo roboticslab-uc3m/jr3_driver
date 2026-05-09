@@ -2,6 +2,7 @@ import rclpy
 import time
 
 from rclpy.node import Node
+from std_srvs.srv import Trigger
 from geometry_msgs.msg import Wrench, Vector3
 from rcl_interfaces.msg import ParameterDescriptor
 from .Jr3Manager import Jr3Manager
@@ -36,6 +37,8 @@ class Jr3Driver(Node):
 
             self.timer = self.create_timer(publish_period_param.get_parameter_value().double_value * 0.001,
                                            self.timer_callback)
+
+            self.calibration_service = self.create_service(Trigger, 'jr3/zero', self.calibration_callback)
 
             self.get_logger().info('JR3 sensor is running.')
         except Exception as e:
@@ -83,6 +86,21 @@ class Jr3Driver(Node):
             msg.force = Vector3(x=forces[0], y=forces[1], z=forces[2])
             msg.torque = Vector3(x=torques[0], y=torques[1], z=torques[2])
             self.publisher.publish(msg)
+
+    def calibration_callback(self, request, response):
+        self.get_logger().info('Zeroing JR3 sensor on request...')
+        ret, state = self.jr3.zero_offs()
+
+        if ret:
+            response.success = True
+            response.message = 'JR3 sensor zeroed successfully'
+            self.get_logger().info(response.message)
+        else:
+            response.success = False
+            response.message = 'Failed to zero JR3 sensor'
+            self.get_logger().error(response.message)
+
+        return response
 
 def main(args=None):
     rclpy.init(args=args)
