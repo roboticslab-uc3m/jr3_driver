@@ -107,7 +107,8 @@ class Jr3BaseNode(ABC, Node):
     def jr3_listener_callback(self, msg: Wrench):
         force = kdl.Vector(msg.force.x, msg.force.y, msg.force.z)
         torque = kdl.Vector(msg.torque.x, msg.torque.y, msg.torque.z)
-        self.wrench_tcp = self.H_tcp_jr3 * kdl.Wrench(force, torque)
+        self.wrench_jr3 = kdl.Wrench(force, torque)
+        self.wrench_tcp = self.H_tcp_jr3 * self.wrench_jr3
 
     def egm_state_callback(self, msg: Pose):
         p = kdl.Vector(msg.position.x, msg.position.y, msg.position.z)
@@ -116,7 +117,8 @@ class Jr3BaseNode(ABC, Node):
 
     def command_worker(self):
         if self.current_pose is not None and self.wrench_tcp is not None:
-            H_0_tcp = kdl.Frame(self.current_pose)
+            H_0_tcp = self.current_pose * kdl.Frame(kdl.Vector(0.0, 0.0, 0.1817))
+            self.get_logger().info(f'{self.wrench_jr3.force} {self.wrench_jr3.torque} {self.wrench_tcp.force} {self.wrench_tcp.torque}')
 
             toolWeight_tcp = H_0_tcp.M.Inverse() * self.toolWeight_0 # tool weight measured on the CoM
             toolWeight_tcp = toolWeight_tcp.RefPoint(self.H_jr3_tcp.p - self.toolCoM_jr3) # tool weight measured on the TCP
