@@ -81,7 +81,7 @@ class Jr3Driver(Node):
     def timer_callback(self):
         success, forces, torques, _ = self.jr3.read()
 
-        if success:
+        if success and forces is not None and torques is not None:
             msg = Wrench()
             msg.force = Vector3(x=forces[0], y=forces[1], z=forces[2])
             msg.torque = Vector3(x=torques[0], y=torques[1], z=torques[2])
